@@ -1,19 +1,21 @@
 ###############################################################################
 ### Generic Makefile for cc65 projects - full version with abstract options ###
-### V1.3.0(w) 2010 - 2013 Oliver Schmidt & Patryk "Silver Dream !" Łogiewa  ###
+### V1.3.1(w) 2022 Richard D. Chennault.  Original V1.3.0. 2010 - 2013 Oliver Schmidt & Patryk "Silver Dream !" Łogiewa  ###
 ###############################################################################
 
 ###############################################################################
 ### In order to override defaults - values can be assigned to the variables ###
 ###############################################################################
 
-# Space or comma separated list of cc65 supported target platforms to build for.
-# Default: atari (lowercase!)
+# Name of the application unless and override is present in PROGRAM
+BASENAME  := $(shell basename $(PWD))
+
+# Override for target platform.  Default is atari
 TARGETS := 
 
 # Name of the final, single-file executable.
 # Default: name of the current dir with target name appended
-PROGRAM :=
+PROGRAM := 
 
 # Path(s) to additional libraries required for linking the program
 # Use only if you don't want to place copies of the libraries in SRCDIR
@@ -27,19 +29,22 @@ CONFIG  :=
 
 # Additional C compiler flags and options.
 # Default: none
-CFLAGS  = --verbose
+# CFLAGS  = --verbose 
+CFLAGS += --verbose --listing $(@:.o=.lst)
+# CFLAGS  := 
 
 # Additional assembler flags and options.
 # Default: none
-ASFLAGS =
+ASFLAGS := --listing $$(@:.o=.lst)
 
 # Additional linker flags and options.
 # Default: none
 # For atari you must reserve memory for graphics mode or display list management.  
 # Refer to cl65 and atari documentation for further details.
 # Reference : https://atariage.com/forums/topic/283350-cc65-config-file-for-linker/
-LDFLAGS = -v -vm -D,__RESERVED_MEMORY_=0x1 
-
+# LDFLAGS = -v -D,__RESERVED_MEMORY_=0x1 
+LDFLAGS := -v -Wl --dbgfile,$(PWD)/src/$(BASENAME).dbg --mapfile $(PWD)/src/$(BASENAME).map 
+# dbgfile,$$@.dbg
 # Path to the directory containing C and ASM sources.
 # Default: src
 SRCDIR :=
@@ -75,6 +80,7 @@ VICE_HOME :=
 # Options state file name. You should not need to change this, but for those
 # rare cases when you feel you really need to name it differently - here you are
 STATEFILE := Makefile.options
+
 
 ###################################################################################
 ####  DO NOT EDIT BELOW THIS LINE, UNLESS YOU REALLY KNOW WHAT YOU ARE DOING!  ####
@@ -117,7 +123,7 @@ endef
 
 # Linker flags for generating a debug file
 define _debugfile_
-  LDFLAGS += -Wl --dbgfile $$@.dbg
+  LDFLAGS += -Wl --dbgfile,$$@.dbg
   REMOVES += $(PROGRAM).dbg
 endef
 
@@ -134,8 +140,12 @@ endif
 # Presume we're in a project directory so name the program like the current
 # directory. Set PROGRAM to override.
 ifeq ($(PROGRAM),)
-  PROGRAM := $(notdir $(CURDIR))
+  # PROGRAM := $(notdir $(CURDIR))
+  # makefile does not handle spaces in a director well. Workaround is to use $(shell pwd)
+  # PROGRAM := $(patsubst %/.*,%,$^) 
+  PROGRAM := $(patsubst %/,%,$(shell pwd))
 endif
+
 
 # Presume we're in a project directory 
 # Set BUILD to override.
@@ -167,7 +177,7 @@ plus4_EMUCMD := $(VICE_HOME)xplus4 -TEDdsize -autoload
 c16_EMUCMD := $(VICE_HOME)xplus4 -ramsize 16 -TEDdsize -autoload
 cbm510_EMUCMD := $(VICE_HOME)xcbm2 -model 510 -VICIIdsize -autoload
 cbm610_EMUCMD := $(VICE_HOME)xcbm2 -model 610 -Crtcdsize -autoload
-atari_EMUCMD := atari800 -windowed -xl -pal -nopatchall -run
+atari_EMUCMD := atari800 -windowed -xl -ntsc -nopatchall -run
 cx16_EMUCMD := x16emu -run -prg
 
 ifeq ($(EMUCMD),)
@@ -215,7 +225,8 @@ TARGETLIST := $(subst $(COMMA),$(SPACE),$(TARGETS))
 ifeq ($(words $(TARGETLIST)),1)
 
 # Set PROGRAM to something like 'myprog.c64'.
-override PROGRAM := $(PROGRAM).$(TARGETLIST)
+# override PROGRAM := 
+# override PROGRAM := $(PROGRAM).$(TARGETLIST)
 
 # Set SOURCES to something like 'src/foo.c src/bar.s'.
 # Use of assembler files with names ending differently than .s is deprecated!
@@ -314,10 +325,8 @@ $(TARGETOBJDIR)/%.o: %.a65 | $(TARGETOBJDIR)
 	cl65 -t $(CC65TARGET) -c --create-dep $(@:.o=.d) $(ASFLAGS) -o $@ $<
 
 $(PROGRAM): $(CONFIG) $(OBJECTS) $(LIBS)
-	cl65 -t $(CC65TARGET) $(LDFLAGS) -o $(BUILD)/$@.xex $(patsubst %.cfg,-C %.cfg,$^)
-
-# $(BUILD): $(PROGRAM) 
-#	mv $(PROGRAM) $(BUILD)/$(PROGRAM).xex
+#	cl65 -t $(CC65TARGET) $(LDFLAGS) -o $@ $(patsubst %.cfg,-C %.cfg,$^)
+	cl65 -t $(CC65TARGET) $(LDFLAGS) -o $(PWD)/$(BUILD)/$(BASENAME).xex $(patsubst %.cfg,-C %.cfg,$^) 
 
 test: $(PROGRAM)
 	$(PREEMUCMD)
@@ -328,13 +337,14 @@ clean:
 	$(call RMFILES,$(OBJECTS))
 	$(call RMFILES,$(DEPENDS))
 	$(call RMFILES,$(REMOVES))
-	rm -f $(BUILD)/$(PROGRAM).xex
+	$(call RMFILES,$(BUILD)/*)
+	$(call RMFILES,*.map)
 
 else # $(words $(TARGETLIST)),1
 
 all test clean:
 	$(foreach t,$(TARGETLIST),$(MAKE) TARGETS=$t $@$(NEWLINE))
-
+	$(info $$CFLAGS $[$CFLAGS})
 endif # $(words $(TARGETLIST)),1
 
 OBJDIRLIST := $(wildcard $(OBJDIR)/*)
